@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2D Pixel Platformer Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.25);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(4px);
+            active:bg-rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col justify-between items-center overflow-hidden p-2">
+
+    <!-- Header HUD -->
+    <header class="w-full max-w-4xl flex justify-between items-center bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 shadow-md">
+        <div class="flex items-center gap-4">
+            <span class="text-xl font-bold text-yellow-400">🪙 <span id="scoreText">000</span></span>
+            <span class="text-sm text-slate-300">HP: <span id="livesText" class="text-red-400 font-bold">❤❤❤</span></span>
+        </div>
+        <div class="text-xs sm:text-sm text-slate-400">
+            [A][D] / [←][→] : Jalan | [W] / [Space] : Lompat
+        </div>
+        <button id="resetBtn" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-3 py-1.5 rounded-lg font-bold transition">
+            Restart
+        </button>
+    </header>
+
+    <!-- Canvas Container -->
+    <main class="relative w-full max-w-4xl flex-grow flex items-center justify-center my-2">
+        <canvas id="gameCanvas" class="w-full h-auto max-h-[60vh] bg-slate-950 rounded-xl shadow-2xl border-2 border-slate-700"></canvas>
+
+        <!-- UI Overlay (Game Over / Level Complete) -->
+        <div id="overlay" class="absolute inset-0 bg-black/80 rounded-xl flex flex-col justify-center items-center text-center p-6 hidden backdrop-blur-sm">
+            <h1 id="overlayTitle" class="text-3xl sm:text-5xl font-extrabold mb-3 text-yellow-400 drop-shadow-md">GAME OVER</h1>
+            <p id="overlayMessage" class="text-slate-300 text-sm sm:text-base mb-6">Kamu terjatuh ke dalam jurang!</p>
+            <button id="restartOverlayBtn" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition">
+                Coba Lagi
+            </button>
+        </div>
+    </main>
+
+    <!-- On-Screen Touch Controls (Mobil Friendly) -->
+    <footer class="w-full max-w-4xl flex justify-between items-center px-4 py-2 select-none">
+        <div class="flex gap-2">
+            <button id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold active:bg-white/40">
+                ◀
+            </button>
+            <button id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold active:bg-white/40">
+                ▶
+            </button>
+        </div>
+        <div class="flex gap-2">
+            <button id="btnJump" class="touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xl font-bold active:bg-indigo-500/60">
+                LOMPAT
+            </button>
+        </div>
+    </footer>
+
+    <script>
+        // Setup Game Canvas & Context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Internal resolution setup (retro aspect ratio)
+        canvas.width = 640;
+        canvas.height = 360;
+
+        // Game Constants
+        const GRAVITY = 0.45;
+        const FRICTION = 0.82;
+
+        // Sprite Loading - Individual frames dari folder terpisah
+        const sprites = {
+            idle: [],
+            run: [],
+            jump: new Image()
+        };
+        
+        // Load idle sprites (9 frames)
+        for (let i = 0; i <= 8; i++) {
+            const img = new Image();
+            img.src = `assets/sprites/idle/sprite_idle${i}.png`;
+            sprites.idle.push(img);
+        }
+        
+        // Load run sprites (6 frames)
+        for (let i = 0; i <= 5; i++) {
+            const img = new Image();
+            img.src = `assets/sprites/run/sprite_${i}.png`;
+            sprites.run.push(img);
+        }
+        
+        // Load jump sprite
+        sprites.jump.src = 'assets/sprites/jump/llama jump.png';
+        
+        // Sprite Configuration
+        const SPRITE_CONFIG = {
+            frameWidth: 48,
+            frameHeight: 58,
+            idleFrames: 9,
+            runFrames: 6,
+            idleSpeed: 0.02,   // Kecepatan animasi idle (sangat lambat)
+            runSpeed: 0.10,    // Kecepatan animasi run (lebih lambat)
+            idleDelay: 600     // 10 detik * 60 fps = 600 frames sebelum animasi idle aktif
+        };
+
+        // Particle System for Dust Effects
+        const particles = [];
+        
+        class DustParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 3; // Random horizontal velocity
+                this.vy = -Math.random() * 2 - 1;    // Upward velocity
+                this.size = Math.random() * 4 + 2;   // Random size 2-6
+                this.life = 1.0;                     // Full opacity
+                this.decay = Math.random() * 0.03 + 0.02; // Fade speed
+                this.color = Math.random() > 0.5 ? '#a8a29e' : '#78716c'; // Stone colors
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.1; // Gravity on particles
+                this.life -= this.decay;
+                this.size *= 0.97; // Shrink over time
+            }
+            
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x - cameraX, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            isDead() {
+                return this.life <= 0 || this.size < 0.5;
+            }
+        }
+        
+        // Function to spawn dust particles
+        function spawnDustParticles(x, y, count = 8) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new DustParticle(x, y));
+            }
+        }
+        
+        // Update all particles
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                if (particles[i].isDead()) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Draw all particles
+        function drawParticles() {
+            particles.forEach(p => p.draw());
+        }
+
+        // Game State Variables
+        let gameState = 'PLAYING'; // PLAYING, GAMEOVER, WIN
+        let score = 0;
+        let lives = 3;
+
+        // Controls State
+        const keys = {
+            left: false,
+            right: false,
+            up: false
+        };
+
+        // Camera Offset
+        let cameraX = 0;
+
+        // Player Class
+        class Player {
+            constructor() {
+                // Ukuran hitbox (lebih kecil dari sprite untuk gameplay yang fair)
+                this.width = 30;
+                this.height = 50;
+                // Sprite animation properties
+                this.currentFrame = 0;
+                this.frameTimer = 0;
+                this.idleFrame = 0;       // Separate frame counter for idle
+                this.idleTimer = 0;       // Separate timer for idle animation
+                this.inactiveTimer = 0;   // Timer untuk track berapa lama tidak ada action
+                // Effect properties
+                this.wasGrounded = false;  // Track landing for dust effect
+                this.runBobTimer = 0;      // For run bobbing effect
+                this.reset();
+            }
+
+            reset() {
+                this.x = 50;
+                this.y = 260; // Adjusted for taller sprite
+                this.vx = 0;
+                this.vy = 0;
+                this.speed = 2.0;  // Kecepatan jalan lebih lambat
+                this.jumpPower = -10.5;
+                this.isGrounded = false;
+                this.wasGrounded = false;
+                this.facing = 'right';
+                this.currentFrame = 0;
+                this.frameTimer = 0;
+                this.idleFrame = 0;
+                this.idleTimer = 0;
+                this.inactiveTimer = 0;
+                this.runBobTimer = 0;
+            }
+
+            update(platforms) {
+                // Track previous grounded state for landing detection
+                this.wasGrounded = this.isGrounded;
+                
+                // Movement Horizontal
+                if (keys.left) {
+                    this.vx = -this.speed;
+                    this.facing = 'left';
+                } else if (keys.right) {
+                    this.vx = this.speed;
+                    this.facing = 'right';
+                } else {
+                    this.vx *= FRICTION;
+                }
+
+                // Jump Movement
+                if (keys.up && this.isGrounded) {
+                    this.vy = this.jumpPower;
+                    this.isGrounded = false;
+                    // Spawn small dust when jumping
+                    spawnDustParticles(this.x + this.width / 2, this.y + this.height, 4);
+                }
+
+                // Apply Gravity
+                this.vy += GRAVITY;
+
+                // Move Horizontal & Check Platform Collision
+                this.x += this.vx;
+
+                // Prevent player from walking backward out of the map bounds (Mentok di batas kiri)
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.vx = 0;
+                }
+
+                this.checkPlatformCollision(platforms, 'horizontal');
+
+                // Move Vertical & Check Platform Collision
+                this.y += this.vy;
+                this.isGrounded = false;
+                this.checkPlatformCollision(platforms, 'vertical');
+                
+                // Spawn dust particles on landing
+                if (this.isGrounded && !this.wasGrounded) {
+                    // Just landed! Spawn dust
+                    spawnDustParticles(this.x + this.width / 2, this.y + this.height, 10);
+                }
+
+                // Respawn if fell into pit
+                if (this.y > canvas.height + 100) {
+                    playerHit();
+                }
+            }
+
+            checkPlatformCollision(platforms, direction) {
+                for (let p of platforms) {
+                    if (
+                        this.x < p.x + p.w &&
+                        this.x + this.width > p.x &&
+                        this.y < p.y + p.h &&
+                        this.y + this.height > p.y
+                    ) {
+                        if (direction === 'horizontal') {
+                            if (this.vx > 0) this.x = p.x - this.width;
+                            else if (this.vx < 0) this.x = p.x + p.w;
+                        }
+                        if (direction === 'vertical') {
+                            if (this.vy > 0) {
+                                this.y = p.y - this.height;
+                                this.vy = 0;
+                                this.isGrounded = true;
+                            } else if (this.vy < 0) {
+                                this.y = p.y + p.h;
+                                this.vy = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            draw() {
+                ctx.save();
+                
+                // Calculate effect offsets
+                let yOffset = 0;
+                const isMoving = Math.abs(this.vx) > 0.5;
+                const hasAction = isMoving || !this.isGrounded || keys.left || keys.right || keys.up;
+                
+                // Track inactive time
+                if (hasAction) {
+                    this.inactiveTimer = 0;  // Reset timer jika ada action
+                    this.idleFrame = 0;      // Reset idle animation
+                    this.idleTimer = 0;
+                } else {
+                    this.inactiveTimer++;    // Increment inactive timer
+                }
+                
+                if (this.isGrounded && isMoving) {
+                    // Run bobbing effect - slight up/down bounce while running
+                    this.runBobTimer += 0.3;
+                    yOffset = Math.sin(this.runBobTimer) * 2;
+                } else {
+                    this.runBobTimer = 0;
+                }
+                
+                // Posisi draw (sesuaikan agar sprite center dengan hitbox)
+                const drawX = this.x - cameraX - 9; // offset untuk centering
+                const drawY = this.y - 8 + yOffset; // offset karena sprite lebih tinggi + effect
+                
+                // Flip sprite jika menghadap kiri
+                if (this.facing === 'left') {
+                    ctx.translate(drawX + SPRITE_CONFIG.frameWidth, drawY);
+                    ctx.scale(-1, 1);
+                } else {
+                    ctx.translate(drawX, drawY);
+                }
+
+                // Pilih sprite berdasarkan state
+                let currentSprite;
+                
+                if (!this.isGrounded) {
+                    // JUMPING/FALLING: Gunakan sprite jump
+                    currentSprite = sprites.jump;
+                } else if (isMoving) {
+                    // RUNNING: Animasi 6 frame loop
+                    this.frameTimer += SPRITE_CONFIG.runSpeed;
+                    if (this.frameTimer >= 1) {
+                        this.frameTimer = 0;
+                        this.currentFrame++;
+                        if (this.currentFrame >= SPRITE_CONFIG.runFrames) {
+                            this.currentFrame = 0; // Loop back
+                        }
+                    }
+                    currentSprite = sprites.run[this.currentFrame];
+                } else if (this.inactiveTimer >= SPRITE_CONFIG.idleDelay) {
+                    // FULL IDLE ANIMATION: Aktif setelah 10 detik tidak ada action
+                    this.idleTimer += SPRITE_CONFIG.idleSpeed;
+                    if (this.idleTimer >= 1) {
+                        this.idleTimer = 0;
+                        this.idleFrame++;
+                        if (this.idleFrame >= SPRITE_CONFIG.idleFrames) {
+                            this.idleFrame = 0; // Loop back
+                        }
+                    }
+                    currentSprite = sprites.idle[this.idleFrame];
+                } else {
+                    // STANDING: Gunakan sprite_idle0 saja (belum 10 detik)
+                    currentSprite = sprites.idle[0];
+                    this.currentFrame = 0; // Reset run frame saat idle
+                }
+
+                // Draw sprite
+                ctx.drawImage(
+                    currentSprite,
+                    0, 0,                                          // Source x, y
+                    SPRITE_CONFIG.frameWidth, SPRITE_CONFIG.frameHeight,  // Source width, height
+                    0, 0,                                          // Dest x, y
+                    SPRITE_CONFIG.frameWidth, SPRITE_CONFIG.frameHeight   // Dest width, height
+                );
+
+                ctx.restore();
+            }
+        }
+
+        // Enemy Class (Smart Chasing AI)
+        class Enemy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 20;
+                this.height = 18;
+                this.vx = 0;
+                this.vy = 0;
+                this.speed = 0.9; // Kecepatan dikurangi agar tidak terlalu cepat
+                this.jumpPower = -8.5;
+                this.alive = true;
+                this.isGrounded = false;
+                this.isChasing = false;
+                this.detectionRadius = 220; // Distance to detect player
+            }
+
+            update(player, platforms) {
+                if (!this.alive) return;
+
+                // Calculate distance to player
+                const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+                const dy = (player.y + player.height / 2) - (this.y + this.height / 2);
+                const dist = Math.hypot(dx, dy);
+
+                // Detect if player is within agro/chase radius
+                if (dist < this.detectionRadius) {
+                    this.isChasing = true;
+
+                    // Move horizontally towards player
+                    if (dx > 5) {
+                        this.vx = this.speed;
+                    } else if (dx < -5) {
+                        this.vx = -this.speed;
+                    } else {
+                        this.vx = 0;
+                    }
+
+                    // Jump ONLY when there is a wall blocking the enemy's path
+                    const wallInFront = this.checkWallAhead(platforms);
+
+                    if (wallInFront && this.isGrounded) {
+                        this.vy = this.jumpPower;
+                        this.isGrounded = false;
+                    }
+                } else {
+                    this.isChasing = false;
+                    this.vx *= FRICTION; // Slow down when player escapes detection
+                }
+
+                // Apply Gravity
+                this.vy += GRAVITY;
+
+                // Move Horizontal & Check Wall Collision
+                this.x += this.vx;
+                this.checkPlatformCollision(platforms, 'horizontal');
+
+                // Move Vertical & Check Ground Collision
+                this.y += this.vy;
+                this.isGrounded = false;
+                this.checkPlatformCollision(platforms, 'vertical');
+            }
+
+            checkWallAhead(platforms) {
+                // Direction offset to probe wall ahead
+                const offsetX = this.vx > 0 ? this.width + 4 : -4;
+                const probeX = this.x + offsetX;
+                const probeY = this.y + this.height - 4;
+
+                for (let p of platforms) {
+                    if (
+                        probeX > p.x &&
+                        probeX < p.x + p.w &&
+                        probeY > p.y &&
+                        probeY < p.y + p.h
+                    ) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            checkPlatformCollision(platforms, direction) {
+                for (let p of platforms) {
+                    if (
+                        this.x < p.x + p.w &&
+                        this.x + this.width > p.x &&
+                        this.y < p.y + p.h &&
+                        this.y + this.height > p.y
+                    ) {
+                        if (direction === 'horizontal') {
+                            if (this.vx > 0) this.x = p.x - this.width;
+                            else if (this.vx < 0) this.x = p.x + p.w;
+                        }
+                        if (direction === 'vertical') {
+                            if (this.vy > 0) {
+                                this.y = p.y - this.height;
+                                this.vy = 0;
+                                this.isGrounded = true;
+                            } else if (this.vy < 0) {
+                                this.y = p.y + p.h;
+                                this.vy = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            draw() {
+                if (!this.alive) return;
+                ctx.save();
+                ctx.translate(this.x - cameraX, this.y);
+
+                // Mushroom Body
+                ctx.fillStyle = this.isChasing ? '#dc2626' : '#ea580c'; // Red head when agro
+                ctx.beginPath();
+                ctx.arc(this.width / 2, 8, 10, Math.PI, 0, false);
+                ctx.fill();
+
+                // Mushroom Stalk
+                ctx.fillStyle = '#ffe4e6';
+                ctx.fillRect(4, 8, 12, 10);
+
+                // Eyes
+                ctx.fillStyle = this.isChasing ? '#ef4444' : '#000000';
+                ctx.fillRect(6, 10, 2, 4);
+                ctx.fillRect(12, 10, 2, 4);
+
+                // Agro Indicator Bubble (!)
+                if (this.isChasing) {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillText('!', this.width / 2 - 2, -4);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // Map Level Definition (Platforms, Coins, Spikes, Flag)
+        const level = {
+            width: 1800,
+            platforms: [
+                { x: 0, y: 320, w: 400, h: 40 },
+                { x: 480, y: 320, w: 350, h: 40 },
+                { x: 220, y: 240, w: 100, h: 16 },
+                { x: 380, y: 180, w: 90, h: 16 },
+                { x: 550, y: 220, w: 120, h: 16 },
+                { x: 880, y: 320, w: 400, h: 40 },
+                { x: 960, y: 230, w: 100, h: 16 },
+                { x: 1120, y: 170, w: 100, h: 16 },
+                { x: 1330, y: 320, w: 470, h: 40 }
+            ],
+            coins: [
+                { x: 250, y: 210, collected: false },
+                { x: 410, y: 150, collected: false },
+                { x: 600, y: 190, collected: false },
+                { x: 700, y: 280, collected: false },
+                { x: 1000, y: 190, collected: false },
+                { x: 1160, y: 130, collected: false },
+                { x: 1450, y: 280, collected: false }
+            ],
+            spikes: [
+                { x: 650, y: 304, w: 30, h: 16 },
+                { x: 1100, y: 304, w: 40, h: 16 }
+            ],
+            enemies: [
+                new Enemy(300, 290),
+                new Enemy(620, 290),
+                new Enemy(1050, 290),
+                new Enemy(1400, 290)
+            ],
+            flag: { x: 1720, y: 240, w: 20, h: 80 }
+        };
+
+        // Initialize Entities
+        const player = new Player();
+
+        // Check Collisions for Collectibles & Enemies
+        function checkCollisions() {
+            // Coins
+            level.coins.forEach(coin => {
+                if (!coin.collected) {
+                    if (
+                        player.x < coin.x + 12 &&
+                        player.x + player.width > coin.x &&
+                        player.y < coin.y + 12 &&
+                        player.y + player.height > coin.y
+                    ) {
+                        coin.collected = true;
+                        score += 100;
+                        updateHUD();
+                    }
+                }
+            });
+
+            // Spikes
+            level.spikes.forEach(spike => {
+                if (
+                    player.x < spike.x + spike.w &&
+                    player.x + player.width > spike.x &&
+                    player.y < spike.y + spike.h &&
+                    player.y + player.height > spike.y
+                ) {
+                    playerHit();
+                }
+            });
+
+            // Enemies
+            level.enemies.forEach(enemy => {
+                if (!enemy.alive) return;
+
+                if (
+                    player.x < enemy.x + enemy.width &&
+                    player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.height > enemy.y
+                ) {
+                    // Stomp Enemy from above
+                    if (player.vy > 0 && player.y + player.height - player.vy <= enemy.y + 8) {
+                        enemy.alive = false;
+                        player.vy = player.jumpPower * 0.7; // Bounce
+                        score += 200;
+                        updateHUD();
+                    } else {
+                        playerHit();
+                    }
+                }
+            });
+
+            // Victory Flag
+            const flag = level.flag;
+            if (
+                player.x < flag.x + flag.w &&
+                player.x + player.width > flag.x &&
+                player.y < flag.y + flag.h &&
+                player.y + player.height > flag.y
+            ) {
+                gameWin();
+            }
+        }
+
+        function playerHit() {
+            lives--;
+            updateHUD();
+            if (lives <= 0) {
+                gameOver("Kamu kehabisan nyawa!");
+            } else {
+                player.reset();
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('scoreText').innerText = String(score).padStart(3, '0');
+            document.getElementById('livesText').innerText = '❤'.repeat(Math.max(0, lives));
+        }
+
+        function gameOver(msg) {
+            gameState = 'GAMEOVER';
+            document.getElementById('overlayTitle').innerText = 'GAME OVER';
+            document.getElementById('overlayTitle').className = 'text-3xl sm:text-5xl font-extrabold mb-3 text-red-500 drop-shadow-md';
+            document.getElementById('overlayMessage').innerText = msg;
+            document.getElementById('overlay').classList.remove('hidden');
+        }
+
+        function gameWin() {
+            gameState = 'WIN';
+            document.getElementById('overlayTitle').innerText = 'VICTORY!';
+            document.getElementById('overlayTitle').className = 'text-3xl sm:text-5xl font-extrabold mb-3 text-yellow-400 drop-shadow-md';
+            document.getElementById('overlayMessage').innerText = `Selamat! Kamu menyelesaikan level dengan skor ${score}!`;
+            document.getElementById('overlay').classList.remove('hidden');
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            gameState = 'PLAYING';
+            player.reset();
+            level.coins.forEach(c => c.collected = false);
+            level.enemies.forEach(e => {
+                e.alive = true;
+                e.x = e.x;
+            });
+            updateHUD();
+            document.getElementById('overlay').classList.add('hidden');
+        }
+
+        // Draw Parallax Sky & Level Elements
+        function render() {
+            // === LAYER 0: Sky Gradient ===
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGradient.addColorStop(0, '#1a1a2e');    // Gelap atas (malam/senja)
+            skyGradient.addColorStop(0.3, '#16213e'); // Biru gelap
+            skyGradient.addColorStop(0.6, '#1f4068'); // Biru medium
+            skyGradient.addColorStop(1, '#4a6fa5');   // Biru terang bawah
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // === LAYER 1: Distant Mountains (paling jauh) ===
+            ctx.fillStyle = '#2d3a4f';
+            drawMountainLayer(0.05, 180, 120, 200);
+            
+            // === LAYER 2: Mid Mountains ===
+            ctx.fillStyle = '#1e3a2f';
+            drawMountainLayer(0.1, 220, 80, 150);
+            
+            // === LAYER 3: Near Mountains with snow caps ===
+            ctx.fillStyle = '#152e1f';
+            drawMountainLayer(0.15, 250, 60, 120);
+            // Snow caps
+            ctx.fillStyle = '#e8e8e8';
+            drawSnowCaps(0.15, 250, 60, 120);
+            
+            // === LAYER 4: Distant Pine Trees ===
+            ctx.fillStyle = '#0d2818';
+            drawPineTreeLayer(0.2, 280, 40, 60, 80);
+            
+            // === LAYER 5: Mid Pine Trees ===
+            ctx.fillStyle = '#0a3d1e';
+            drawPineTreeLayer(0.3, 300, 50, 70, 50);
+            
+            // === LAYER 6: Near Pine Trees ===
+            ctx.fillStyle = '#0f5223';
+            drawPineTreeLayer(0.4, 310, 60, 80, 35);
+            
+            // === LAYER 7: Fog/Mist Effect ===
+            ctx.fillStyle = 'rgba(200, 220, 210, 0.1)';
+            ctx.fillRect(0, 260, canvas.width, 40);
+            
+            // === LAYER 8: Ground bushes (foreground parallax) ===
+            drawBushLayer(0.5, 330);
+
+            // Platforms (dengan tekstur tanah hutan)
+            level.platforms.forEach(p => {
+                // Platform body - tanah coklat
+                ctx.fillStyle = '#3d2914';
+                ctx.fillRect(p.x - cameraX, p.y, p.w, p.h);
+                
+                // Layer tanah gelap
+                ctx.fillStyle = '#2a1d0d';
+                ctx.fillRect(p.x - cameraX, p.y + p.h - 8, p.w, 8);
+                
+                // Top grass/moss - hijau hutan
+                ctx.fillStyle = '#1a5c2e';
+                ctx.fillRect(p.x - cameraX, p.y, p.w, 6);
+                
+                // Grass detail pixels
+                ctx.fillStyle = '#2d8a47';
+                for (let gx = p.x; gx < p.x + p.w; gx += 8) {
+                    if (Math.sin(gx * 0.5) > 0.3) {
+                        ctx.fillRect(gx - cameraX, p.y - 2, 4, 4);
+                    }
+                    if (Math.cos(gx * 0.7) > 0.5) {
+                        ctx.fillRect(gx - cameraX + 2, p.y - 4, 2, 6);
+                    }
+                }
+            });
+
+            // Coins (golden acorn style)
+            level.coins.forEach(c => {
+                if (!c.collected) {
+                    // Outer glow
+                    ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(c.x + 6 - cameraX, c.y + 6, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Main coin
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath();
+                    ctx.arc(c.x + 6 - cameraX, c.y + 6, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Shine
+                    ctx.fillStyle = '#fef08a';
+                    ctx.beginPath();
+                    ctx.arc(c.x + 4 - cameraX, c.y + 4, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Spikes (wooden/thorny style)
+            level.spikes.forEach(s => {
+                ctx.fillStyle = '#5c4033';
+                ctx.beginPath();
+                ctx.moveTo(s.x - cameraX, s.y + s.h);
+                ctx.lineTo(s.x + s.w / 2 - cameraX, s.y);
+                ctx.lineTo(s.x + s.w - cameraX, s.y + s.h);
+                ctx.closePath();
+                ctx.fill();
+                // Thorn tip
+                ctx.fillStyle = '#8b5a2b';
+                ctx.beginPath();
+                ctx.moveTo(s.x + s.w/2 - 3 - cameraX, s.y + 8);
+                ctx.lineTo(s.x + s.w / 2 - cameraX, s.y);
+                ctx.lineTo(s.x + s.w/2 + 3 - cameraX, s.y + 8);
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            // Flag (wooden pole with green flag)
+            const f = level.flag;
+            ctx.fillStyle = '#5c4033';
+            ctx.fillRect(f.x - cameraX, f.y, 4, f.h); // wooden pole
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.moveTo(f.x + 4 - cameraX, f.y);
+            ctx.lineTo(f.x + 28 - cameraX, f.y + 14);
+            ctx.lineTo(f.x + 4 - cameraX, f.y + 28);
+            ctx.closePath();
+            ctx.fill();
+            // Flag detail
+            ctx.fillStyle = '#16a34a';
+            ctx.beginPath();
+            ctx.moveTo(f.x + 4 - cameraX, f.y + 8);
+            ctx.lineTo(f.x + 18 - cameraX, f.y + 14);
+            ctx.lineTo(f.x + 4 - cameraX, f.y + 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // Enemies
+            level.enemies.forEach(e => e.draw());
+            
+            // Dust Particles (draw behind player for better effect)
+            drawParticles();
+
+            // Player
+            player.draw();
+            
+            // === FOREGROUND: Floating particles/fireflies ===
+            drawFireflies();
+        }
+        
+        // Helper: Draw mountain silhouette layer
+        function drawMountainLayer(parallaxSpeed, baseY, minHeight, maxHeight) {
+            const offsetX = cameraX * parallaxSpeed;
+            ctx.beginPath();
+            ctx.moveTo(-50, canvas.height);
+            
+            let x = -50;
+            while (x < canvas.width + 100) {
+                const height = minHeight + Math.abs(Math.sin(x * 0.008 + offsetX * 0.001)) * (maxHeight - minHeight);
+                const peakX = x + 40 + Math.sin(x * 0.02) * 20;
+                ctx.lineTo(x - offsetX % 200, baseY);
+                ctx.lineTo(peakX - offsetX % 200, baseY - height);
+                x += 80 + Math.sin(x) * 30;
+            }
+            
+            ctx.lineTo(canvas.width + 50, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // Helper: Draw snow caps on mountains
+        function drawSnowCaps(parallaxSpeed, baseY, minHeight, maxHeight) {
+            const offsetX = cameraX * parallaxSpeed;
+            
+            let x = -50;
+            while (x < canvas.width + 100) {
+                const height = minHeight + Math.abs(Math.sin(x * 0.008 + offsetX * 0.001)) * (maxHeight - minHeight);
+                const peakX = x + 40 + Math.sin(x * 0.02) * 20;
+                const snowY = baseY - height;
+                
+                // Snow cap triangle
+                ctx.beginPath();
+                ctx.moveTo(peakX - offsetX % 200 - 15, snowY + 20);
+                ctx.lineTo(peakX - offsetX % 200, snowY);
+                ctx.lineTo(peakX - offsetX % 200 + 15, snowY + 20);
+                ctx.closePath();
+                ctx.fill();
+                
+                x += 80 + Math.sin(x) * 30;
+            }
+        }
+        
+        // Helper: Draw pine tree silhouette layer
+        function drawPineTreeLayer(parallaxSpeed, baseY, minH, maxH, spacing) {
+            const offsetX = cameraX * parallaxSpeed;
+            
+            for (let x = -spacing; x < canvas.width + spacing * 2; x += spacing) {
+                const treeX = x - (offsetX % spacing);
+                const height = minH + Math.abs(Math.sin(x * 0.1)) * (maxH - minH);
+                const width = height * 0.5;
+                
+                // Tree trunk
+                ctx.fillRect(treeX - 2, baseY - 10, 4, 10);
+                
+                // Pine tree shape (triangle layers)
+                ctx.beginPath();
+                ctx.moveTo(treeX, baseY - height);
+                ctx.lineTo(treeX - width/2, baseY - 10);
+                ctx.lineTo(treeX + width/2, baseY - 10);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+        
+        // Helper: Draw bush layer
+        function drawBushLayer(parallaxSpeed, baseY) {
+            const offsetX = cameraX * parallaxSpeed;
+            ctx.fillStyle = '#1a472a';
+            
+            for (let x = -30; x < canvas.width + 60; x += 45) {
+                const bushX = x - (offsetX % 45);
+                const size = 12 + Math.sin(x * 0.2) * 5;
+                
+                ctx.beginPath();
+                ctx.arc(bushX, baseY, size, Math.PI, 0);
+                ctx.arc(bushX + size, baseY, size * 0.8, Math.PI, 0);
+                ctx.arc(bushX - size * 0.5, baseY, size * 0.6, Math.PI, 0);
+                ctx.fill();
+            }
+        }
+        
+        // Helper: Draw floating fireflies
+        let fireflyTime = 0;
+        function drawFireflies() {
+            fireflyTime += 0.02;
+            ctx.fillStyle = 'rgba(255, 255, 150, 0.6)';
+            
+            for (let i = 0; i < 8; i++) {
+                const x = (i * 97 + Math.sin(fireflyTime + i) * 30) % canvas.width;
+                const y = 200 + Math.cos(fireflyTime * 0.5 + i * 2) * 50;
+                const size = 2 + Math.sin(fireflyTime * 2 + i) * 1;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Main Game Loop
+        function loop() {
+            if (gameState === 'PLAYING') {
+                player.update(level.platforms);
+
+                // Update Camera (Center on player smoothly)
+                cameraX = player.x - canvas.width / 3;
+                cameraX = Math.max(0, Math.min(cameraX, level.width - canvas.width));
+
+                // Update Enemies
+                level.enemies.forEach(e => e.update(player, level.platforms));
+                
+                // Update Particles
+                updateParticles();
+
+                checkCollisions();
+            }
+
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        // Input Event Handlers
+        window.addEventListener('keydown', e => {
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.left = true;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = true;
+            if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = true;
+        });
+
+        window.addEventListener('keyup', e => {
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.left = false;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = false;
+            if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = false;
+        });
+
+        // Touch Control Listeners (Mobile)
+        const setupTouchBtn = (id, keyName) => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[keyName] = true;
+            });
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+            });
+            btn.addEventListener('mousedown', () => keys[keyName] = true);
+            btn.addEventListener('mouseup', () => keys[keyName] = false);
+        };
+
+        setupTouchBtn('btnLeft', 'left');
+        setupTouchBtn('btnRight', 'right');
+        setupTouchBtn('btnJump', 'up');
+
+        document.getElementById('resetBtn').addEventListener('click', resetGame);
+        document.getElementById('restartOverlayBtn').addEventListener('click', resetGame);
+
+        // Start Loop on window load
+        window.onload = () => {
+            updateHUD();
+            loop();
+        };
+    </script>
+</body>
+</html>
