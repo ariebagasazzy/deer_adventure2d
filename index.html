@@ -2,74 +2,179 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Pixel Platformer Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <title>Deer Adventure 2D</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
             font-family: 'Courier New', Courier, monospace;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: manipulation;
+            touch-action: none;
+            background: #0f172a;
         }
+        
         canvas {
             image-rendering: pixelated;
             image-rendering: crisp-edges;
+            -ms-interpolation-mode: nearest-neighbor;
         }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            height: 100dvh; /* Dynamic viewport height for mobile */
+            width: 100%;
+            max-width: 100%;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        
         .touch-btn {
-            background: rgba(255, 255, 255, 0.25);
-            border: 2px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.2);
+            border: 3px solid rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(4px);
-            active:bg-rgba(255, 255, 255, 0.5);
+            -webkit-backdrop-filter: blur(4px);
+            transition: all 0.1s ease;
+        }
+        
+        .touch-btn:active, .touch-btn.pressed {
+            background: rgba(255, 255, 255, 0.5);
+            transform: scale(0.95);
+        }
+        
+        /* Hide touch controls on desktop */
+        @media (hover: hover) and (pointer: fine) {
+            .touch-controls {
+                display: none !important;
+            }
+            .canvas-container {
+                flex: 1 !important;
+                max-height: none !important;
+            }
+        }
+        
+        /* Mobile landscape optimization */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .game-header {
+                padding: 4px 8px !important;
+            }
+            .game-header .text-xl {
+                font-size: 14px !important;
+            }
+            .touch-controls {
+                padding: 4px 8px !important;
+            }
+            .touch-btn {
+                width: 50px !important;
+                height: 50px !important;
+            }
+            .jump-btn {
+                width: 60px !important;
+                height: 60px !important;
+            }
+        }
+        
+        /* Small phone optimization */
+        @media (max-width: 380px) {
+            .game-header {
+                padding: 6px 8px !important;
+                gap: 4px !important;
+            }
+            .touch-btn {
+                width: 48px !important;
+                height: 48px !important;
+            }
+            .jump-btn {
+                width: 56px !important;
+                height: 56px !important;
+                font-size: 10px !important;
+            }
+        }
+        
+        /* Tablet and desktop */
+        @media (min-width: 768px) {
+            .canvas-container {
+                max-width: 900px;
+                margin: 0 auto;
+            }
+        }
+        
+        /* Fullscreen mode */
+        .game-container:fullscreen {
+            padding: 0;
+        }
+        
+        .game-container:fullscreen .canvas-container {
+            max-width: 100%;
+            max-height: 100%;
         }
     </style>
 </head>
-<body class="bg-slate-900 text-white min-h-screen flex flex-col justify-between items-center overflow-hidden p-2">
+<body class="bg-slate-900 text-white">
+    <div class="game-container">
+        <!-- Header HUD -->
+        <header class="game-header flex justify-between items-center bg-slate-800/90 px-3 py-2 border-b border-slate-700 shrink-0">
+            <div class="flex items-center gap-3">
+                <span class="text-lg sm:text-xl font-bold text-yellow-400">🪙 <span id="scoreText">000</span></span>
+                <span class="text-xs sm:text-sm text-slate-300">HP: <span id="livesText" class="text-red-400 font-bold">❤❤❤</span></span>
+            </div>
+            <div class="hidden md:block text-xs text-slate-400">
+                [A][D] Jalan | [W]/[Space] Lompat
+            </div>
+            <div class="flex gap-2">
+                <button id="fullscreenBtn" class="bg-slate-700 hover:bg-slate-600 text-xs px-2 py-1.5 rounded-lg font-bold transition hidden sm:block">
+                    ⛶
+                </button>
+                <button id="resetBtn" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-3 py-1.5 rounded-lg font-bold transition">
+                    ↻
+                </button>
+            </div>
+        </header>
 
-    <!-- Header HUD -->
-    <header class="w-full max-w-4xl flex justify-between items-center bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 shadow-md">
-        <div class="flex items-center gap-4">
-            <span class="text-xl font-bold text-yellow-400">🪙 <span id="scoreText">000</span></span>
-            <span class="text-sm text-slate-300">HP: <span id="livesText" class="text-red-400 font-bold">❤❤❤</span></span>
-        </div>
-        <div class="text-xs sm:text-sm text-slate-400">
-            [A][D] / [←][→] : Jalan | [W] / [Space] : Lompat
-        </div>
-        <button id="resetBtn" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-3 py-1.5 rounded-lg font-bold transition">
-            Restart
-        </button>
-    </header>
+        <!-- Canvas Container -->
+        <main class="canvas-container relative flex-1 flex items-center justify-center p-2 min-h-0">
+            <canvas id="gameCanvas" class="w-full h-full max-w-full max-h-full object-contain bg-slate-950 rounded-lg shadow-2xl border-2 border-slate-700"></canvas>
 
-    <!-- Canvas Container -->
-    <main class="relative w-full max-w-4xl flex-grow flex items-center justify-center my-2">
-        <canvas id="gameCanvas" class="w-full h-auto max-h-[60vh] bg-slate-950 rounded-xl shadow-2xl border-2 border-slate-700"></canvas>
+            <!-- UI Overlay (Game Over / Level Complete) -->
+            <div id="overlay" class="absolute inset-2 bg-black/85 rounded-lg flex flex-col justify-center items-center text-center p-4 hidden backdrop-blur-sm">
+                <h1 id="overlayTitle" class="text-2xl sm:text-4xl md:text-5xl font-extrabold mb-2 text-yellow-400 drop-shadow-md">GAME OVER</h1>
+                <p id="overlayMessage" class="text-slate-300 text-xs sm:text-sm md:text-base mb-4">Kamu terjatuh ke dalam jurang!</p>
+                <button id="restartOverlayBtn" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold py-2 px-6 sm:py-3 sm:px-8 rounded-full shadow-lg transform hover:scale-105 transition text-sm sm:text-base">
+                    Coba Lagi
+                </button>
+            </div>
+        </main>
 
-        <!-- UI Overlay (Game Over / Level Complete) -->
-        <div id="overlay" class="absolute inset-0 bg-black/80 rounded-xl flex flex-col justify-center items-center text-center p-6 hidden backdrop-blur-sm">
-            <h1 id="overlayTitle" class="text-3xl sm:text-5xl font-extrabold mb-3 text-yellow-400 drop-shadow-md">GAME OVER</h1>
-            <p id="overlayMessage" class="text-slate-300 text-sm sm:text-base mb-6">Kamu terjatuh ke dalam jurang!</p>
-            <button id="restartOverlayBtn" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition">
-                Coba Lagi
+        <!-- On-Screen Touch Controls (Mobile Only) -->
+        <footer class="touch-controls flex justify-between items-center px-4 py-3 bg-slate-800/50 shrink-0">
+            <div class="flex gap-3">
+                <button id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
+                    ◀
+                </button>
+                <button id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
+                    ▶
+                </button>
+            </div>
+            <button id="btnJump" class="jump-btn touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xs sm:text-sm font-bold">
+                JUMP
             </button>
-        </div>
-    </main>
-
-    <!-- On-Screen Touch Controls (Mobil Friendly) -->
-    <footer class="w-full max-w-4xl flex justify-between items-center px-4 py-2 select-none">
-        <div class="flex gap-2">
-            <button id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold active:bg-white/40">
-                ◀
-            </button>
-            <button id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold active:bg-white/40">
-                ▶
-            </button>
-        </div>
-        <div class="flex gap-2">
-            <button id="btnJump" class="touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xl font-bold active:bg-indigo-500/60">
-                LOMPAT
-            </button>
-        </div>
-    </footer>
+        </footer>
+    </div>
 
     <script>
         // Setup Game Canvas & Context
@@ -654,7 +759,7 @@
         function gameOver(msg) {
             gameState = 'GAMEOVER';
             document.getElementById('overlayTitle').innerText = 'GAME OVER';
-            document.getElementById('overlayTitle').className = 'text-3xl sm:text-5xl font-extrabold mb-3 text-red-500 drop-shadow-md';
+            document.getElementById('overlayTitle').className = 'text-2xl sm:text-4xl md:text-5xl font-extrabold mb-2 text-red-500 drop-shadow-md';
             document.getElementById('overlayMessage').innerText = msg;
             document.getElementById('overlay').classList.remove('hidden');
         }
@@ -662,8 +767,8 @@
         function gameWin() {
             gameState = 'WIN';
             document.getElementById('overlayTitle').innerText = 'VICTORY!';
-            document.getElementById('overlayTitle').className = 'text-3xl sm:text-5xl font-extrabold mb-3 text-yellow-400 drop-shadow-md';
-            document.getElementById('overlayMessage').innerText = `Selamat! Kamu menyelesaikan level dengan skor ${score}!`;
+            document.getElementById('overlayTitle').className = 'text-2xl sm:text-4xl md:text-5xl font-extrabold mb-2 text-yellow-400 drop-shadow-md';
+            document.getElementById('overlayMessage').innerText = `Selamat! Skor: ${score}`;
             document.getElementById('overlay').classList.remove('hidden');
         }
 
@@ -958,19 +1063,48 @@
             if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = false;
         });
 
-        // Touch Control Listeners (Mobile)
+        // Touch Control Listeners (Mobile) - Improved
         const setupTouchBtn = (id, keyName) => {
             const btn = document.getElementById(id);
+            
+            // Touch events
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 keys[keyName] = true;
-            });
+                btn.classList.add('pressed');
+            }, { passive: false });
+            
             btn.addEventListener('touchend', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 keys[keyName] = false;
+                btn.classList.remove('pressed');
+            }, { passive: false });
+            
+            btn.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+                btn.classList.remove('pressed');
+            }, { passive: false });
+            
+            // Mouse events (for testing on desktop)
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                keys[keyName] = true;
+                btn.classList.add('pressed');
             });
-            btn.addEventListener('mousedown', () => keys[keyName] = true);
-            btn.addEventListener('mouseup', () => keys[keyName] = false);
+            
+            btn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+                btn.classList.remove('pressed');
+            });
+            
+            btn.addEventListener('mouseleave', () => {
+                keys[keyName] = false;
+                btn.classList.remove('pressed');
+            });
         };
 
         setupTouchBtn('btnLeft', 'left');
@@ -979,6 +1113,31 @@
 
         document.getElementById('resetBtn').addEventListener('click', resetGame);
         document.getElementById('restartOverlayBtn').addEventListener('click', resetGame);
+        
+        // Fullscreen toggle
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', () => {
+                const container = document.querySelector('.game-container');
+                if (!document.fullscreenElement) {
+                    container.requestFullscreen().catch(err => {
+                        console.log('Fullscreen not available');
+                    });
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+        }
+        
+        // Prevent zoom on double tap (iOS)
+        document.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Prevent context menu on long press
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
 
         // Start Loop on window load
         window.onload = () => {
