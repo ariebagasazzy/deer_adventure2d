@@ -364,6 +364,13 @@
                 // Effect properties
                 this.wasGrounded = false;  // Track landing for dust effect
                 this.runBobTimer = 0;      // For run bobbing effect
+                // Damage/death effect
+                this.isHurt = false;
+                this.hurtTimer = 0;
+                this.blinkTimer = 0;
+                this.visible = true;
+                this.invincible = false;   // Brief invincibility after respawn
+                this.invincibleTimer = 0;
                 this.reset();
             }
 
@@ -383,9 +390,56 @@
                 this.idleTimer = 0;
                 this.inactiveTimer = 0;
                 this.runBobTimer = 0;
+                this.isHurt = false;
+                this.hurtTimer = 0;
+                this.blinkTimer = 0;
+                this.visible = true;
+                this.invincible = false;
+                this.invincibleTimer = 0;
             }
 
             update(platforms) {
+                // Handle hurt/blink animation
+                if (this.isHurt) {
+                    this.hurtTimer--;
+                    this.blinkTimer++;
+                    
+                    // Blink every 4 frames
+                    this.visible = Math.floor(this.blinkTimer / 4) % 2 === 0;
+                    
+                    // After hurt animation, respawn
+                    if (this.hurtTimer <= 0) {
+                        this.isHurt = false;
+                        this.visible = true;
+                        this.blinkTimer = 0;
+                        
+                        // Respawn at checkpoint
+                        this.x = currentCheckpoint.x;
+                        this.y = currentCheckpoint.y;
+                        this.vx = 0;
+                        this.vy = 0;
+                        this.isGrounded = false;
+                        
+                        // Brief invincibility after respawn
+                        this.invincible = true;
+                        this.invincibleTimer = 90; // 1.5 seconds
+                    }
+                    return; // Don't process movement while hurt
+                }
+                
+                // Handle invincibility blinking after respawn
+                if (this.invincible) {
+                    this.invincibleTimer--;
+                    this.blinkTimer++;
+                    this.visible = Math.floor(this.blinkTimer / 6) % 2 === 0;
+                    
+                    if (this.invincibleTimer <= 0) {
+                        this.invincible = false;
+                        this.visible = true;
+                        this.blinkTimer = 0;
+                    }
+                }
+                
                 // Track previous grounded state for landing detection
                 this.wasGrounded = this.isGrounded;
                 
@@ -493,6 +547,9 @@
             }
 
             draw() {
+                // Don't draw if not visible (blinking)
+                if (!this.visible) return;
+                
                 ctx.save();
                 
                 // Calculate effect offsets
@@ -887,7 +944,10 @@
 
         // Check Collisions for Collectibles & Enemies
         function checkCollisions() {
-            // Coins
+            // Skip collision checks if player is hurt or invincible
+            const canTakeDamage = !player.isHurt && !player.invincible;
+            
+            // Coins (can still collect while invincible)
             level.coins.forEach(coin => {
                 if (!coin.collected) {
                     if (
@@ -903,17 +963,19 @@
                 }
             });
 
-            // Spikes
-            level.spikes.forEach(spike => {
-                if (
-                    player.x < spike.x + spike.w &&
-                    player.x + player.width > spike.x &&
-                    player.y < spike.y + spike.h &&
-                    player.y + player.height > spike.y
-                ) {
-                    playerHit();
-                }
-            });
+            // Spikes - only if can take damage
+            if (canTakeDamage) {
+                level.spikes.forEach(spike => {
+                    if (
+                        player.x < spike.x + spike.w &&
+                        player.x + player.width > spike.x &&
+                        player.y < spike.y + spike.h &&
+                        player.y + player.height > spike.y
+                    ) {
+                        playerHit();
+                    }
+                });
+            }
 
             // Enemies
             level.enemies.forEach(enemy => {
@@ -925,13 +987,14 @@
                     player.y < enemy.y + enemy.height &&
                     player.y + player.height > enemy.y
                 ) {
-                    // Stomp Enemy from above
+                    // Stomp Enemy from above (can stomp even while invincible)
                     if (player.vy > 0 && player.y + player.height - player.vy <= enemy.y + 8) {
                         enemy.alive = false;
                         player.vy = player.jumpPower * 0.7; // Bounce
                         score += 200;
                         updateHUD();
-                    } else {
+                    } else if (canTakeDamage) {
+                        // Only take damage if not invincible
                         playerHit();
                     }
                 }
@@ -950,17 +1013,21 @@
         }
 
         function playerHit() {
+            // Ignore if already hurt or invincible
+            if (player.isHurt || player.invincible) return;
+            
             lives--;
             updateHUD();
+            
             if (lives <= 0) {
                 gameOver("Kamu kehabisan nyawa!");
             } else {
-                // Respawn at last checkpoint
-                player.x = currentCheckpoint.x;
-                player.y = currentCheckpoint.y;
+                // Start hurt/blink animation
+                player.isHurt = true;
+                player.hurtTimer = 60; // 1 second of blinking
+                player.blinkTimer = 0;
                 player.vx = 0;
-                player.vy = 0;
-                player.isGrounded = false;
+                player.vy = -5; // Small bounce up
             }
         }
 
