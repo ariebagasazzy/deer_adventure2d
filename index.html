@@ -718,19 +718,20 @@
                 new Enemy(1400, 290)
             ],
             flag: { x: 1720, y: 240, w: 20, h: 80 },
-            // Checkpoints - bendera kecil sebagai save point
+            // Checkpoints - area based (invisible zones)
             checkpoints: [
-                { x: 450, y: 280, activated: false },   // Checkpoint 1 - setelah gap pertama
-                { x: 850, y: 280, activated: false },   // Checkpoint 2 - sebelum area tengah
-                { x: 1300, y: 280, activated: false }   // Checkpoint 3 - area akhir
+                { xStart: 400, xEnd: 500, activated: false },    // Checkpoint 1 - setelah gap pertama
+                { xStart: 800, xEnd: 900, activated: false },    // Checkpoint 2 - area tengah
+                { xStart: 1250, xEnd: 1350, activated: false }   // Checkpoint 3 - area akhir
             ]
         };
         
         // Checkpoint & Save System
         const SAVE_KEY = 'deer_adventure_save';
         let currentCheckpoint = { x: 50, y: 260 }; // Default spawn
-        let showCheckpointMessage = false;
-        let checkpointMessageTimer = 0;
+        let showSavingMessage = false;
+        let savingMessageTimer = 0;
+        let savingMessageAlpha = 0;
         
         // Save game state to localStorage
         function saveGame() {
@@ -744,7 +745,7 @@
             };
             try {
                 localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
-                console.log('Game saved at checkpoint!');
+                console.log('Game saved!');
             } catch(e) {
                 console.log('Could not save game:', e);
             }
@@ -804,85 +805,47 @@
             }
         }
         
-        // Check checkpoint collision
+        // Check if player entered checkpoint area
         function checkCheckpoints() {
             level.checkpoints.forEach((cp, index) => {
                 if (!cp.activated) {
-                    // Check if player touches checkpoint
-                    if (
-                        player.x < cp.x + 20 &&
-                        player.x + player.width > cp.x &&
-                        player.y < cp.y + 40 &&
-                        player.y + player.height > cp.y
-                    ) {
+                    // Check if player is within checkpoint area (X range only)
+                    if (player.x >= cp.xStart && player.x <= cp.xEnd) {
                         cp.activated = true;
-                        currentCheckpoint = { x: cp.x, y: cp.y - 10 };
+                        currentCheckpoint = { x: player.x, y: player.y };
                         
                         // Autosave
                         saveGame();
                         
-                        // Show message
-                        showCheckpointMessage = true;
-                        checkpointMessageTimer = 120; // 2 seconds at 60fps
-                        
-                        // Bonus score for checkpoint
-                        score += 50;
-                        updateHUD();
+                        // Show saving message
+                        showSavingMessage = true;
+                        savingMessageTimer = 90; // 1.5 seconds
+                        savingMessageAlpha = 1;
                     }
                 }
             });
         }
         
-        // Draw checkpoints
-        function drawCheckpoints() {
-            level.checkpoints.forEach((cp, index) => {
-                const flagX = cp.x - cameraX;
-                const flagY = cp.y;
+        // Draw saving message at top right
+        function drawSavingMessage() {
+            if (showSavingMessage && savingMessageTimer > 0) {
+                savingMessageTimer--;
                 
-                // Pole
-                ctx.fillStyle = cp.activated ? '#22c55e' : '#64748b';
-                ctx.fillRect(flagX, flagY, 4, 40);
-                
-                // Flag
-                ctx.fillStyle = cp.activated ? '#22c55e' : '#94a3b8';
-                ctx.beginPath();
-                ctx.moveTo(flagX + 4, flagY);
-                ctx.lineTo(flagX + 20, flagY + 8);
-                ctx.lineTo(flagX + 4, flagY + 16);
-                ctx.closePath();
-                ctx.fill();
-                
-                // Glow effect if activated
-                if (cp.activated) {
-                    ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
-                    ctx.beginPath();
-                    ctx.arc(flagX + 10, flagY + 20, 25, 0, Math.PI * 2);
-                    ctx.fill();
+                // Fade out in last 30 frames
+                if (savingMessageTimer < 30) {
+                    savingMessageAlpha = savingMessageTimer / 30;
                 }
                 
-                // Number label
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 10px Courier';
-                ctx.fillText(index + 1, flagX + 6, flagY + 35);
-            });
-        }
-        
-        // Draw checkpoint message
-        function drawCheckpointMessage() {
-            if (showCheckpointMessage && checkpointMessageTimer > 0) {
-                checkpointMessageTimer--;
-                
-                const alpha = Math.min(1, checkpointMessageTimer / 30);
                 ctx.save();
-                ctx.globalAlpha = alpha;
+                ctx.globalAlpha = savingMessageAlpha;
                 ctx.fillStyle = '#22c55e';
-                ctx.font = 'bold 16px Courier';
-                ctx.textAlign = 'center';
-                ctx.fillText('✓ CHECKPOINT SAVED!', canvas.width / 2, 50);
+                ctx.font = 'bold 12px Courier';
+                ctx.textAlign = 'right';
+                ctx.fillText('Saving...', canvas.width - 15, 25);
                 ctx.restore();
                 
-                if (checkpointMessageTimer <= 0) {
-                    showCheckpointMessage = false;
+                if (savingMessageTimer <= 0) {
+                    showSavingMessage = false;
                 }
             }
         }
@@ -1161,17 +1124,14 @@
             // Enemies
             level.enemies.forEach(e => e.draw());
             
-            // Checkpoints
-            drawCheckpoints();
-            
             // Dust Particles (draw behind player for better effect)
             drawParticles();
 
             // Player
             player.draw();
             
-            // Checkpoint message overlay
-            drawCheckpointMessage();
+            // Saving message (top right corner)
+            drawSavingMessage();
             
             // === FOREGROUND: Floating particles/fireflies ===
             drawFireflies();
