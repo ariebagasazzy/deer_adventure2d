@@ -180,16 +180,16 @@
         </main>
 
         <!-- On-Screen Touch Controls (Mobile Only) -->
-        <footer class="touch-controls flex justify-between items-center px-4 py-3 bg-slate-800/50 shrink-0">
-            <div class="flex gap-3">
-                <button id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
+        <footer class="touch-controls flex justify-between items-center px-6 py-3 bg-slate-800/50 shrink-0" style="touch-action: none;">
+            <div class="flex gap-3 ml-2" style="touch-action: none;">
+                <button id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold" style="touch-action: none; -webkit-touch-callout: none;">
                     ◀
                 </button>
-                <button id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
+                <button id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold" style="touch-action: none; -webkit-touch-callout: none;">
                     ▶
                 </button>
             </div>
-            <button id="btnJump" class="jump-btn touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xs sm:text-sm font-bold">
+            <button id="btnJump" class="jump-btn touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xs sm:text-sm font-bold mr-2" style="touch-action: none; -webkit-touch-callout: none;">
                 JUMP
             </button>
         </footer>
@@ -1085,49 +1085,45 @@
         // Touch Control Listeners (Mobile) - Optimized for zero delay
         const setupTouchBtn = (id, keyName) => {
             const btn = document.getElementById(id);
+            let isPressed = false;
             
-            // Use pointer events for faster response
-            btn.addEventListener('pointerdown', (e) => {
+            const activate = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                btn.setPointerCapture(e.pointerId);
-                keys[keyName] = true;
-                btn.classList.add('pressed');
-            }, { passive: false });
+                e.stopImmediatePropagation();
+                if (!isPressed) {
+                    isPressed = true;
+                    keys[keyName] = true;
+                    btn.classList.add('pressed');
+                }
+                return false;
+            };
             
-            btn.addEventListener('pointerup', (e) => {
+            const deactivate = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                btn.releasePointerCapture(e.pointerId);
+                e.stopImmediatePropagation();
+                isPressed = false;
                 keys[keyName] = false;
                 btn.classList.remove('pressed');
-            }, { passive: false });
+                return false;
+            };
             
-            btn.addEventListener('pointercancel', (e) => {
-                e.preventDefault();
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-            }, { passive: false });
+            // Pointer events (primary)
+            btn.addEventListener('pointerdown', activate, { passive: false, capture: true });
+            btn.addEventListener('pointerup', deactivate, { passive: false, capture: true });
+            btn.addEventListener('pointercancel', deactivate, { passive: false, capture: true });
+            btn.addEventListener('pointerleave', deactivate, { passive: false, capture: true });
             
-            btn.addEventListener('pointerleave', (e) => {
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-            }, { passive: false });
+            // Touch events (fallback)
+            btn.addEventListener('touchstart', activate, { passive: false, capture: true });
+            btn.addEventListener('touchend', deactivate, { passive: false, capture: true });
+            btn.addEventListener('touchcancel', deactivate, { passive: false, capture: true });
             
-            // Backup touch events for older browsers
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                keys[keyName] = true;
-                btn.classList.add('pressed');
-            }, { passive: false });
-            
-            btn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-            }, { passive: false });
+            // Mouse events (desktop)
+            btn.addEventListener('mousedown', activate, { passive: false });
+            btn.addEventListener('mouseup', deactivate, { passive: false });
+            btn.addEventListener('mouseleave', deactivate, { passive: false });
         };
 
         setupTouchBtn('btnLeft', 'left');
@@ -1152,18 +1148,24 @@
             });
         }
         
-        // Prevent all default touch behaviors
-        document.addEventListener('touchstart', (e) => {
-            if (e.target.closest('.touch-btn')) {
-                e.preventDefault();
+        // Block ALL edge swipe gestures (Android back gesture)
+        const blockEdgeGestures = (e) => {
+            const touch = e.touches[0] || e.changedTouches[0];
+            if (touch) {
+                // Block if touch is near left or right edge (within 30px)
+                if (touch.clientX < 50 || touch.clientX > window.innerWidth - 50) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
             }
-        }, { passive: false });
+        };
         
+        document.addEventListener('touchstart', blockEdgeGestures, { passive: false, capture: true });
         document.addEventListener('touchmove', (e) => {
             e.preventDefault();
         }, { passive: false });
         
-        // Prevent zoom on double tap (iOS)
+        // Prevent zoom on double tap
         let lastTouchEnd = 0;
         document.addEventListener('touchend', (e) => {
             const now = Date.now();
