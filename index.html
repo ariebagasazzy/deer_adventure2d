@@ -175,7 +175,7 @@
                 <span class="text-xs sm:text-sm text-slate-300">HP: <span id="livesText" class="text-red-400 font-bold">❤❤❤</span></span>
             </div>
             <div class="hidden md:block text-xs text-slate-400">
-                [A][D] Jalan | [W]/[Space] Lompat
+                [A][D] Jalan | [S] Turun | [W]/[Space] Lompat
             </div>
             <div class="flex gap-2">
                 <button id="fullscreenBtn" class="bg-slate-700 hover:bg-slate-600 text-xs px-2 py-1.5 rounded-lg font-bold transition hidden sm:block">
@@ -203,11 +203,14 @@
 
         <!-- On-Screen Touch Controls (Mobile Only) -->
         <footer id="touchArea" class="touch-controls flex justify-between items-center px-6 py-3 bg-slate-800/50 shrink-0" style="touch-action: none;">
-            <div class="flex gap-3 ml-2 pointer-events-none">
-                <div id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
+            <div class="flex gap-2 ml-2 pointer-events-none">
+                <div id="btnLeft" class="touch-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-xl font-bold">
                     ◀
                 </div>
-                <div id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
+                <div id="btnDown" class="touch-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-xl font-bold">
+                    ▼
+                </div>
+                <div id="btnRight" class="touch-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-xl font-bold">
                     ▶
                 </div>
             </div>
@@ -339,7 +342,8 @@
         const keys = {
             left: false,
             right: false,
-            up: false
+            up: false,
+            down: false  // New: for dropping through platforms
         };
 
         // Camera Offset
@@ -437,25 +441,52 @@
 
             checkPlatformCollision(platforms, direction) {
                 for (let p of platforms) {
-                    if (
+                    // Check if this is a one-way platform (not solid)
+                    const isOneWay = p.solid === false;
+                    
+                    // Basic collision check
+                    const colliding = (
                         this.x < p.x + p.w &&
                         this.x + this.width > p.x &&
                         this.y < p.y + p.h &&
                         this.y + this.height > p.y
-                    ) {
-                        if (direction === 'horizontal') {
-                            if (this.vx > 0) this.x = p.x - this.width;
-                            else if (this.vx < 0) this.x = p.x + p.w;
-                        }
-                        if (direction === 'vertical') {
-                            if (this.vy > 0) {
-                                this.y = p.y - this.height;
-                                this.vy = 0;
-                                this.isGrounded = true;
-                            } else if (this.vy < 0) {
-                                this.y = p.y + p.h;
-                                this.vy = 0;
+                    );
+                    
+                    if (!colliding) continue;
+                    
+                    if (direction === 'horizontal') {
+                        // One-way platforms don't block horizontal movement
+                        if (isOneWay) continue;
+                        
+                        if (this.vx > 0) this.x = p.x - this.width;
+                        else if (this.vx < 0) this.x = p.x + p.w;
+                    }
+                    
+                    if (direction === 'vertical') {
+                        if (this.vy > 0) {
+                            // Falling down
+                            // For one-way platforms: only land if coming from above
+                            const feetWereAbove = (this.y + this.height - this.vy * deltaTime) <= p.y + 4;
+                            
+                            // If pressing down on one-way platform, drop through
+                            if (isOneWay && keys.down) {
+                                continue; // Skip this platform, fall through
                             }
+                            
+                            // One-way: only collide if coming from above
+                            if (isOneWay && !feetWereAbove) {
+                                continue; // Pass through from below or side
+                            }
+                            
+                            this.y = p.y - this.height;
+                            this.vy = 0;
+                            this.isGrounded = true;
+                        } else if (this.vy < 0) {
+                            // Moving up - one-way platforms don't block from below
+                            if (isOneWay) continue;
+                            
+                            this.y = p.y + p.h;
+                            this.vy = 0;
                         }
                     }
                 }
@@ -688,15 +719,16 @@
         const level = {
             width: 1800,
             platforms: [
-                { x: 0, y: 320, w: 400, h: 40 },
-                { x: 480, y: 320, w: 350, h: 40 },
-                { x: 220, y: 240, w: 100, h: 16 },
-                { x: 380, y: 180, w: 90, h: 16 },
-                { x: 550, y: 220, w: 120, h: 16 },
-                { x: 880, y: 320, w: 400, h: 40 },
-                { x: 960, y: 230, w: 100, h: 16 },
-                { x: 1120, y: 170, w: 100, h: 16 },
-                { x: 1330, y: 320, w: 470, h: 40 }
+                // solid: true = solid dari semua sisi, false/undefined = one-way (bisa ditembus dari bawah)
+                { x: 0, y: 320, w: 400, h: 40, solid: true },      // Ground - solid
+                { x: 480, y: 320, w: 350, h: 40, solid: true },    // Ground - solid
+                { x: 220, y: 240, w: 100, h: 16, solid: false },   // Floating - one-way
+                { x: 380, y: 180, w: 90, h: 16, solid: false },    // Floating - one-way
+                { x: 550, y: 220, w: 120, h: 16, solid: false },   // Floating - one-way
+                { x: 880, y: 320, w: 400, h: 40, solid: true },    // Ground - solid
+                { x: 960, y: 230, w: 100, h: 16, solid: false },   // Floating - one-way
+                { x: 1120, y: 170, w: 100, h: 16, solid: false },  // Floating - one-way
+                { x: 1330, y: 320, w: 470, h: 40, solid: true }    // Ground - solid
             ],
             coins: [
                 { x: 250, y: 210, collected: false },
@@ -1274,18 +1306,21 @@
             if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.left = true;
             if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = true;
             if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = true;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.down = true;
         });
 
         window.addEventListener('keyup', e => {
             if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.left = false;
             if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = false;
             if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = false;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.down = false;
         });
 
         // Direct touch tracking on footer area - bypasses all browser delays
         const touchArea = document.getElementById('touchArea');
         const btnLeft = document.getElementById('btnLeft');
         const btnRight = document.getElementById('btnRight');
+        const btnDown = document.getElementById('btnDown');
         const btnJump = document.getElementById('btnJump');
         
         const activeTouches = new Map(); // Track multiple touches
@@ -1294,9 +1329,11 @@
             // Reset all
             keys.left = false;
             keys.right = false;
+            keys.down = false;
             keys.up = false;
             btnLeft.classList.remove('pressed');
             btnRight.classList.remove('pressed');
+            btnDown.classList.remove('pressed');
             btnJump.classList.remove('pressed');
             
             // Check each active touch
@@ -1307,6 +1344,9 @@
                 } else if (touchData.button === 'right') {
                     keys.right = true;
                     btnRight.classList.add('pressed');
+                } else if (touchData.button === 'down') {
+                    keys.down = true;
+                    btnDown.classList.add('pressed');
                 } else if (touchData.button === 'jump') {
                     keys.up = true;
                     btnJump.classList.add('pressed');
@@ -1317,14 +1357,19 @@
         function getTouchedButton(x, y) {
             const leftRect = btnLeft.getBoundingClientRect();
             const rightRect = btnRight.getBoundingClientRect();
+            const downRect = btnDown.getBoundingClientRect();
             const jumpRect = btnJump.getBoundingClientRect();
             
-            // Expand hit areas by 15px for easier touch
-            const expand = 15;
+            // Expand hit areas by 10px for easier touch
+            const expand = 10;
             
             if (x >= leftRect.left - expand && x <= leftRect.right + expand &&
                 y >= leftRect.top - expand && y <= leftRect.bottom + expand) {
                 return 'left';
+            }
+            if (x >= downRect.left - expand && x <= downRect.right + expand &&
+                y >= downRect.top - expand && y <= downRect.bottom + expand) {
+                return 'down';
             }
             if (x >= rightRect.left - expand && x <= rightRect.right + expand &&
                 y >= rightRect.top - expand && y <= rightRect.bottom + expand) {
