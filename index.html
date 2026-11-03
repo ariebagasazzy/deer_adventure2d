@@ -717,8 +717,175 @@
                 new Enemy(1050, 290),
                 new Enemy(1400, 290)
             ],
-            flag: { x: 1720, y: 240, w: 20, h: 80 }
+            flag: { x: 1720, y: 240, w: 20, h: 80 },
+            // Checkpoints - bendera kecil sebagai save point
+            checkpoints: [
+                { x: 450, y: 280, activated: false },   // Checkpoint 1 - setelah gap pertama
+                { x: 850, y: 280, activated: false },   // Checkpoint 2 - sebelum area tengah
+                { x: 1300, y: 280, activated: false }   // Checkpoint 3 - area akhir
+            ]
         };
+        
+        // Checkpoint & Save System
+        const SAVE_KEY = 'deer_adventure_save';
+        let currentCheckpoint = { x: 50, y: 260 }; // Default spawn
+        let showCheckpointMessage = false;
+        let checkpointMessageTimer = 0;
+        
+        // Save game state to localStorage
+        function saveGame() {
+            const saveData = {
+                checkpoint: currentCheckpoint,
+                score: score,
+                lives: lives,
+                coinsCollected: level.coins.map(c => c.collected),
+                checkpointsActivated: level.checkpoints.map(cp => cp.activated),
+                enemiesAlive: level.enemies.map(e => e.alive)
+            };
+            try {
+                localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+                console.log('Game saved at checkpoint!');
+            } catch(e) {
+                console.log('Could not save game:', e);
+            }
+        }
+        
+        // Load game state from localStorage
+        function loadGame() {
+            try {
+                const saveData = JSON.parse(localStorage.getItem(SAVE_KEY));
+                if (saveData) {
+                    currentCheckpoint = saveData.checkpoint || { x: 50, y: 260 };
+                    score = saveData.score || 0;
+                    lives = saveData.lives || 3;
+                    
+                    // Restore coins
+                    if (saveData.coinsCollected) {
+                        saveData.coinsCollected.forEach((collected, i) => {
+                            if (level.coins[i]) level.coins[i].collected = collected;
+                        });
+                    }
+                    
+                    // Restore checkpoints
+                    if (saveData.checkpointsActivated) {
+                        saveData.checkpointsActivated.forEach((activated, i) => {
+                            if (level.checkpoints[i]) level.checkpoints[i].activated = activated;
+                        });
+                    }
+                    
+                    // Restore enemies
+                    if (saveData.enemiesAlive) {
+                        saveData.enemiesAlive.forEach((alive, i) => {
+                            if (level.enemies[i]) level.enemies[i].alive = alive;
+                        });
+                    }
+                    
+                    // Move player to checkpoint
+                    player.x = currentCheckpoint.x;
+                    player.y = currentCheckpoint.y;
+                    
+                    updateHUD();
+                    console.log('Game loaded from save!');
+                    return true;
+                }
+            } catch(e) {
+                console.log('Could not load game:', e);
+            }
+            return false;
+        }
+        
+        // Clear save data
+        function clearSave() {
+            try {
+                localStorage.removeItem(SAVE_KEY);
+                console.log('Save data cleared!');
+            } catch(e) {
+                console.log('Could not clear save:', e);
+            }
+        }
+        
+        // Check checkpoint collision
+        function checkCheckpoints() {
+            level.checkpoints.forEach((cp, index) => {
+                if (!cp.activated) {
+                    // Check if player touches checkpoint
+                    if (
+                        player.x < cp.x + 20 &&
+                        player.x + player.width > cp.x &&
+                        player.y < cp.y + 40 &&
+                        player.y + player.height > cp.y
+                    ) {
+                        cp.activated = true;
+                        currentCheckpoint = { x: cp.x, y: cp.y - 10 };
+                        
+                        // Autosave
+                        saveGame();
+                        
+                        // Show message
+                        showCheckpointMessage = true;
+                        checkpointMessageTimer = 120; // 2 seconds at 60fps
+                        
+                        // Bonus score for checkpoint
+                        score += 50;
+                        updateHUD();
+                    }
+                }
+            });
+        }
+        
+        // Draw checkpoints
+        function drawCheckpoints() {
+            level.checkpoints.forEach((cp, index) => {
+                const flagX = cp.x - cameraX;
+                const flagY = cp.y;
+                
+                // Pole
+                ctx.fillStyle = cp.activated ? '#22c55e' : '#64748b';
+                ctx.fillRect(flagX, flagY, 4, 40);
+                
+                // Flag
+                ctx.fillStyle = cp.activated ? '#22c55e' : '#94a3b8';
+                ctx.beginPath();
+                ctx.moveTo(flagX + 4, flagY);
+                ctx.lineTo(flagX + 20, flagY + 8);
+                ctx.lineTo(flagX + 4, flagY + 16);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Glow effect if activated
+                if (cp.activated) {
+                    ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+                    ctx.beginPath();
+                    ctx.arc(flagX + 10, flagY + 20, 25, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Number label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Courier';
+                ctx.fillText(index + 1, flagX + 6, flagY + 35);
+            });
+        }
+        
+        // Draw checkpoint message
+        function drawCheckpointMessage() {
+            if (showCheckpointMessage && checkpointMessageTimer > 0) {
+                checkpointMessageTimer--;
+                
+                const alpha = Math.min(1, checkpointMessageTimer / 30);
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#22c55e';
+                ctx.font = 'bold 16px Courier';
+                ctx.textAlign = 'center';
+                ctx.fillText('✓ CHECKPOINT SAVED!', canvas.width / 2, 50);
+                ctx.restore();
+                
+                if (checkpointMessageTimer <= 0) {
+                    showCheckpointMessage = false;
+                }
+            }
+        }
 
         // Initialize Entities
         const player = new Player();
@@ -793,7 +960,12 @@
             if (lives <= 0) {
                 gameOver("Kamu kehabisan nyawa!");
             } else {
-                player.reset();
+                // Respawn at last checkpoint
+                player.x = currentCheckpoint.x;
+                player.y = currentCheckpoint.y;
+                player.vx = 0;
+                player.vy = 0;
+                player.isGrounded = false;
             }
         }
 
@@ -819,15 +991,38 @@
         }
 
         function resetGame() {
+            // Clear save when restarting
+            clearSave();
+            
             score = 0;
             lives = 3;
             gameState = 'PLAYING';
-            player.reset();
+            currentCheckpoint = { x: 50, y: 260 };
+            
+            player.x = 50;
+            player.y = 260;
+            player.vx = 0;
+            player.vy = 0;
+            player.isGrounded = false;
+            player.facing = 'right';
+            player.currentFrame = 0;
+            player.frameTimer = 0;
+            player.idleFrame = 0;
+            player.idleTimer = 0;
+            player.inactiveTimer = 0;
+            
             level.coins.forEach(c => c.collected = false);
-            level.enemies.forEach(e => {
+            level.checkpoints.forEach(cp => cp.activated = false);
+            level.enemies.forEach((e, i) => {
                 e.alive = true;
-                e.x = e.x;
+                // Reset enemy positions
+                const positions = [[300, 290], [620, 290], [1050, 290], [1400, 290]];
+                if (positions[i]) {
+                    e.x = positions[i][0];
+                    e.y = positions[i][1];
+                }
             });
+            
             updateHUD();
             document.getElementById('overlay').classList.add('hidden');
         }
@@ -966,11 +1161,17 @@
             // Enemies
             level.enemies.forEach(e => e.draw());
             
+            // Checkpoints
+            drawCheckpoints();
+            
             // Dust Particles (draw behind player for better effect)
             drawParticles();
 
             // Player
             player.draw();
+            
+            // Checkpoint message overlay
+            drawCheckpointMessage();
             
             // === FOREGROUND: Floating particles/fireflies ===
             drawFireflies();
@@ -1097,6 +1298,9 @@
                 
                 // Update Particles
                 updateParticles();
+                
+                // Check checkpoint collisions
+                checkCheckpoints();
 
                 checkCollisions();
             }
@@ -1283,8 +1487,14 @@
 
         // Start Loop on window load
         window.onload = () => {
+            // Try to load saved game
+            const hasSave = loadGame();
+            if (hasSave) {
+                console.log('Continuing from checkpoint...');
+            }
+            
             updateHUD();
-            loop();
+            requestAnimationFrame(loop);
         };
     </script>
 </body>
