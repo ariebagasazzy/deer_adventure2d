@@ -1053,14 +1053,15 @@
         }
 
         // Main Game Loop with delta time for consistent speed
-        function loop(currentTime) {
+        function loop(currentTime = performance.now()) {
             // Calculate delta time (normalize to 60 FPS)
             if (lastTime === 0) lastTime = currentTime;
             const elapsed = currentTime - lastTime;
             lastTime = currentTime;
             
             // Delta = 1.0 at 60fps, 2.0 at 30fps, 0.5 at 120fps
-            deltaTime = Math.min(elapsed / (1000 / TARGET_FPS), 3); // Cap at 3x to prevent huge jumps
+            // Prevent NaN or Infinity
+            deltaTime = elapsed > 0 ? Math.min(elapsed / (1000 / TARGET_FPS), 3) : 1;
             
             if (gameState === 'PLAYING') {
                 player.update(level.platforms);
