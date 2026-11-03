@@ -180,18 +180,18 @@
         </main>
 
         <!-- On-Screen Touch Controls (Mobile Only) -->
-        <footer class="touch-controls flex justify-between items-center px-6 py-3 bg-slate-800/50 shrink-0" style="touch-action: none;">
-            <div class="flex gap-3 ml-2" style="touch-action: none;">
-                <button id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold" style="touch-action: none; -webkit-touch-callout: none;">
+        <footer id="touchArea" class="touch-controls flex justify-between items-center px-6 py-3 bg-slate-800/50 shrink-0" style="touch-action: none;">
+            <div class="flex gap-3 ml-2 pointer-events-none">
+                <div id="btnLeft" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
                     ◀
-                </button>
-                <button id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold" style="touch-action: none; -webkit-touch-callout: none;">
+                </div>
+                <div id="btnRight" class="touch-btn w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-2xl font-bold">
                     ▶
-                </button>
+                </div>
             </div>
-            <button id="btnJump" class="jump-btn touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xs sm:text-sm font-bold mr-2" style="touch-action: none; -webkit-touch-callout: none;">
+            <div id="btnJump" class="jump-btn touch-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-500/30 border-indigo-400/60 flex items-center justify-center text-xs sm:text-sm font-bold mr-2 pointer-events-none">
                 JUMP
-            </button>
+            </div>
         </footer>
     </div>
 
@@ -1082,53 +1082,106 @@
             if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = false;
         });
 
-        // Touch Control Listeners (Mobile) - Optimized for zero delay
-        const setupTouchBtn = (id, keyName) => {
-            const btn = document.getElementById(id);
-            let isPressed = false;
+        // Direct touch tracking on footer area - bypasses all browser delays
+        const touchArea = document.getElementById('touchArea');
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnJump = document.getElementById('btnJump');
+        
+        const activeTouches = new Map(); // Track multiple touches
+        
+        function updateButtonStates() {
+            // Reset all
+            keys.left = false;
+            keys.right = false;
+            keys.up = false;
+            btnLeft.classList.remove('pressed');
+            btnRight.classList.remove('pressed');
+            btnJump.classList.remove('pressed');
             
-            const activate = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                if (!isPressed) {
-                    isPressed = true;
-                    keys[keyName] = true;
-                    btn.classList.add('pressed');
+            // Check each active touch
+            activeTouches.forEach((touchData) => {
+                if (touchData.button === 'left') {
+                    keys.left = true;
+                    btnLeft.classList.add('pressed');
+                } else if (touchData.button === 'right') {
+                    keys.right = true;
+                    btnRight.classList.add('pressed');
+                } else if (touchData.button === 'jump') {
+                    keys.up = true;
+                    btnJump.classList.add('pressed');
                 }
-                return false;
-            };
+            });
+        }
+        
+        function getTouchedButton(x, y) {
+            const leftRect = btnLeft.getBoundingClientRect();
+            const rightRect = btnRight.getBoundingClientRect();
+            const jumpRect = btnJump.getBoundingClientRect();
             
-            const deactivate = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                isPressed = false;
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-                return false;
-            };
+            // Expand hit areas by 15px for easier touch
+            const expand = 15;
             
-            // Pointer events (primary)
-            btn.addEventListener('pointerdown', activate, { passive: false, capture: true });
-            btn.addEventListener('pointerup', deactivate, { passive: false, capture: true });
-            btn.addEventListener('pointercancel', deactivate, { passive: false, capture: true });
-            btn.addEventListener('pointerleave', deactivate, { passive: false, capture: true });
-            
-            // Touch events (fallback)
-            btn.addEventListener('touchstart', activate, { passive: false, capture: true });
-            btn.addEventListener('touchend', deactivate, { passive: false, capture: true });
-            btn.addEventListener('touchcancel', deactivate, { passive: false, capture: true });
-            
-            // Mouse events (desktop)
-            btn.addEventListener('mousedown', activate, { passive: false });
-            btn.addEventListener('mouseup', deactivate, { passive: false });
-            btn.addEventListener('mouseleave', deactivate, { passive: false });
-        };
-
-        setupTouchBtn('btnLeft', 'left');
-        setupTouchBtn('btnRight', 'right');
-        setupTouchBtn('btnJump', 'up');
+            if (x >= leftRect.left - expand && x <= leftRect.right + expand &&
+                y >= leftRect.top - expand && y <= leftRect.bottom + expand) {
+                return 'left';
+            }
+            if (x >= rightRect.left - expand && x <= rightRect.right + expand &&
+                y >= rightRect.top - expand && y <= rightRect.bottom + expand) {
+                return 'right';
+            }
+            if (x >= jumpRect.left - expand && x <= jumpRect.right + expand &&
+                y >= jumpRect.top - expand && y <= jumpRect.bottom + expand) {
+                return 'jump';
+            }
+            return null;
+        }
+        
+        // Handle touch start
+        touchArea.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const button = getTouchedButton(touch.clientX, touch.clientY);
+                if (button) {
+                    activeTouches.set(touch.identifier, { button });
+                }
+            }
+            updateButtonStates();
+        }, { passive: false });
+        
+        // Handle touch move (in case finger slides)
+        touchArea.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                const button = getTouchedButton(touch.clientX, touch.clientY);
+                if (activeTouches.has(touch.identifier)) {
+                    activeTouches.set(touch.identifier, { button });
+                }
+            }
+            updateButtonStates();
+        }, { passive: false });
+        
+        // Handle touch end
+        touchArea.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                activeTouches.delete(touch.identifier);
+            }
+            updateButtonStates();
+        }, { passive: false });
+        
+        // Handle touch cancel
+        touchArea.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                activeTouches.delete(touch.identifier);
+            }
+            updateButtonStates();
+        }, { passive: false });
 
         document.getElementById('resetBtn').addEventListener('click', resetGame);
         document.getElementById('restartOverlayBtn').addEventListener('click', resetGame);
@@ -1148,34 +1201,12 @@
             });
         }
         
-        // Block ALL edge swipe gestures (Android back gesture)
-        const blockEdgeGestures = (e) => {
-            const touch = e.touches[0] || e.changedTouches[0];
-            if (touch) {
-                // Block if touch is near left or right edge (within 30px)
-                if (touch.clientX < 50 || touch.clientX > window.innerWidth - 50) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }
-        };
-        
-        document.addEventListener('touchstart', blockEdgeGestures, { passive: false, capture: true });
+        // Block document level touch to prevent browser gestures
         document.addEventListener('touchmove', (e) => {
             e.preventDefault();
         }, { passive: false });
         
-        // Prevent zoom on double tap
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', (e) => {
-            const now = Date.now();
-            if (now - lastTouchEnd <= 300) {
-                e.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, { passive: false });
-        
-        // Prevent context menu on long press
+        // Prevent context menu
         document.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
