@@ -1022,6 +1022,9 @@
                         coin.collected = true;
                         score += 100;
                         updateHUD();
+                        
+                        // Auto-save when coin is collected
+                        saveGame();
                     }
                 }
             });
@@ -1056,6 +1059,9 @@
                         player.vy = player.jumpPower * 0.7; // Bounce
                         score += 200;
                         updateHUD();
+                        
+                        // Auto-save when enemy is killed
+                        saveGame();
                     } else if (canTakeDamage) {
                         // Only take damage if not invincible
                         playerHit();
