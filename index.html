@@ -204,9 +204,14 @@
         canvas.width = 640;
         canvas.height = 360;
 
-        // Game Constants
-        const GRAVITY = 0.45;
+        // Game Constants - Base values at 60 FPS
+        const TARGET_FPS = 60;
+        const GRAVITY_BASE = 0.45;
         const FRICTION = 0.82;
+        
+        // Delta time tracking
+        let lastTime = 0;
+        let deltaTime = 1;  // Multiplier (1 = normal speed at 60fps)
 
         // Sprite Loading - Individual frames dari folder terpisah
         const sprites = {
@@ -358,7 +363,7 @@
                 // Track previous grounded state for landing detection
                 this.wasGrounded = this.isGrounded;
                 
-                // Movement Horizontal
+                // Movement Horizontal - use fixed velocity, only apply delta on position
                 if (keys.left) {
                     this.vx = -this.speed;
                     this.facing = 'left';
@@ -377,13 +382,13 @@
                     spawnDustParticles(this.x + this.width / 2, this.y + this.height, 4);
                 }
 
-                // Apply Gravity
-                this.vy += GRAVITY;
+                // Apply Gravity (scaled by delta time)
+                this.vy += GRAVITY_BASE * deltaTime;
 
-                // Move Horizontal & Check Platform Collision
-                this.x += this.vx;
+                // Move Horizontal (scaled by delta time for consistent speed)
+                this.x += this.vx * deltaTime;
 
-                // Prevent player from walking backward out of the map bounds (Mentok di batas kiri)
+                // Prevent player from walking backward out of the map bounds
                 if (this.x < 0) {
                     this.x = 0;
                     this.vx = 0;
@@ -391,8 +396,8 @@
 
                 this.checkPlatformCollision(platforms, 'horizontal');
 
-                // Move Vertical & Check Platform Collision
-                this.y += this.vy;
+                // Move Vertical (scaled by delta time)
+                this.y += this.vy * deltaTime;
                 this.isGrounded = false;
                 this.checkPlatformCollision(platforms, 'vertical');
                 
@@ -1047,8 +1052,16 @@
             }
         }
 
-        // Main Game Loop
-        function loop() {
+        // Main Game Loop with delta time for consistent speed
+        function loop(currentTime) {
+            // Calculate delta time (normalize to 60 FPS)
+            if (lastTime === 0) lastTime = currentTime;
+            const elapsed = currentTime - lastTime;
+            lastTime = currentTime;
+            
+            // Delta = 1.0 at 60fps, 2.0 at 30fps, 0.5 at 120fps
+            deltaTime = Math.min(elapsed / (1000 / TARGET_FPS), 3); // Cap at 3x to prevent huge jumps
+            
             if (gameState === 'PLAYING') {
                 player.update(level.platforms);
 
