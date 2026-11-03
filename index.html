@@ -25,13 +25,23 @@
             user-select: none;
             -webkit-user-select: none;
             touch-action: none;
+            -webkit-touch-callout: none;
             background: #0f172a;
+        }
+        
+        /* Disable ALL touch delays */
+        button, .touch-btn {
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         canvas {
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             -ms-interpolation-mode: nearest-neighbor;
+            touch-action: none;
         }
         
         .game-container {
@@ -42,6 +52,7 @@
             width: 100%;
             max-width: 100%;
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            touch-action: none;
         }
         
         .touch-btn {
@@ -49,12 +60,20 @@
             border: 3px solid rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
-            transition: all 0.1s ease;
+            cursor: pointer;
+            /* Remove all delays */
+            -ms-touch-action: manipulation;
+            touch-action: manipulation;
         }
         
         .touch-btn:active, .touch-btn.pressed {
             background: rgba(255, 255, 255, 0.5);
             transform: scale(0.95);
+        }
+        
+        .touch-controls {
+            touch-action: none;
+            -webkit-touch-callout: none;
         }
         
         /* Hide touch controls on desktop */
@@ -1063,11 +1082,39 @@
             if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') keys.up = false;
         });
 
-        // Touch Control Listeners (Mobile) - Improved
+        // Touch Control Listeners (Mobile) - Optimized for zero delay
         const setupTouchBtn = (id, keyName) => {
             const btn = document.getElementById(id);
             
-            // Touch events
+            // Use pointer events for faster response
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.setPointerCapture(e.pointerId);
+                keys[keyName] = true;
+                btn.classList.add('pressed');
+            }, { passive: false });
+            
+            btn.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.releasePointerCapture(e.pointerId);
+                keys[keyName] = false;
+                btn.classList.remove('pressed');
+            }, { passive: false });
+            
+            btn.addEventListener('pointercancel', (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+                btn.classList.remove('pressed');
+            }, { passive: false });
+            
+            btn.addEventListener('pointerleave', (e) => {
+                keys[keyName] = false;
+                btn.classList.remove('pressed');
+            }, { passive: false });
+            
+            // Backup touch events for older browsers
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1081,30 +1128,6 @@
                 keys[keyName] = false;
                 btn.classList.remove('pressed');
             }, { passive: false });
-            
-            btn.addEventListener('touchcancel', (e) => {
-                e.preventDefault();
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-            }, { passive: false });
-            
-            // Mouse events (for testing on desktop)
-            btn.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                keys[keyName] = true;
-                btn.classList.add('pressed');
-            });
-            
-            btn.addEventListener('mouseup', (e) => {
-                e.preventDefault();
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-            });
-            
-            btn.addEventListener('mouseleave', () => {
-                keys[keyName] = false;
-                btn.classList.remove('pressed');
-            });
         };
 
         setupTouchBtn('btnLeft', 'left');
@@ -1129,9 +1152,25 @@
             });
         }
         
-        // Prevent zoom on double tap (iOS)
-        document.addEventListener('dblclick', (e) => {
+        // Prevent all default touch behaviors
+        document.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.touch-btn')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        document.addEventListener('touchmove', (e) => {
             e.preventDefault();
+        }, { passive: false });
+        
+        // Prevent zoom on double tap (iOS)
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
         }, { passive: false });
         
         // Prevent context menu on long press
