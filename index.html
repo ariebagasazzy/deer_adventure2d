@@ -1120,11 +1120,11 @@
                 new Hunter(1550, 288)   // Hunter di area akhir
             ],
             flag: { x: 1720, y: 240, w: 20, h: 80 },
-            // Checkpoints - area based (invisible zones)
+            // Checkpoints - area based (invisible zones) with safe spawn points
             checkpoints: [
-                { xStart: 400, xEnd: 500, activated: false },    // Checkpoint 1 - setelah gap pertama
-                { xStart: 800, xEnd: 900, activated: false },    // Checkpoint 2 - area tengah
-                { xStart: 1250, xEnd: 1350, activated: false }   // Checkpoint 3 - area akhir
+                { xStart: 400, xEnd: 500, activated: false, spawnX: 490, spawnY: 270 },    // Checkpoint 1 - di platform setelah gap pertama
+                { xStart: 800, xEnd: 900, activated: false, spawnX: 900, spawnY: 270 },    // Checkpoint 2 - di platform area tengah
+                { xStart: 1250, xEnd: 1350, activated: false, spawnX: 1350, spawnY: 270 }  // Checkpoint 3 - di platform area akhir
             ]
         };
         
@@ -1222,7 +1222,8 @@
                     // Check if player is within checkpoint area (X range only)
                     if (player.x >= cp.xStart && player.x <= cp.xEnd) {
                         cp.activated = true;
-                        currentCheckpoint = { x: player.x, y: player.y };
+                        // Use safe spawn point instead of current player position
+                        currentCheckpoint = { x: cp.spawnX, y: cp.spawnY };
                         
                         // Autosave
                         saveGame();
