@@ -701,16 +701,16 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.width = 24;
+                this.width = 28;
                 this.height = 20;
                 this.vx = 0;
                 this.vy = 0;
-                this.speed = 1.2; // Macan lebih cepat
-                this.jumpPower = -9;
+                this.speed = 0.9; // Kecepatan sama seperti sebelumnya
+                this.jumpPower = -8.5;
                 this.alive = true;
                 this.isGrounded = false;
                 this.isChasing = false;
-                this.detectionRadius = 250; // Macan punya deteksi lebih jauh
+                this.detectionRadius = 220;
             }
 
             update(player, platforms) {
@@ -809,82 +809,119 @@
                 ctx.save();
                 ctx.translate(this.x - cameraX, this.y);
 
-                // Tiger Body
-                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b'; // Orange body, red when angry
-                ctx.fillRect(2, 6, 16, 10);
+                // === TIGER PIXEL ART ===
                 
-                // Tiger stripes
-                ctx.fillStyle = '#000000';
-                ctx.fillRect(4, 6, 2, 10);
-                ctx.fillRect(9, 6, 2, 10);
-                ctx.fillRect(14, 6, 2, 10);
+                // Body (orange)
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(4, 8, 20, 10);
                 
-                // Tiger Head
-                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b';
+                // Body stripes (black)
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(7, 8, 2, 10);
+                ctx.fillRect(12, 8, 2, 10);
+                ctx.fillRect(17, 8, 2, 10);
+                
+                // Head (orange circle)
+                ctx.fillStyle = '#f59e0b';
                 ctx.beginPath();
-                ctx.arc(this.width / 2, 4, 7, 0, Math.PI * 2);
+                ctx.ellipse(6, 10, 6, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // White face/cheeks
+                ctx.fillStyle = '#fff7ed';
+                ctx.beginPath();
+                ctx.ellipse(4, 12, 3, 2, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
                 // Ears
-                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b';
+                ctx.fillStyle = '#f59e0b';
                 ctx.beginPath();
-                ctx.moveTo(4, 0);
-                ctx.lineTo(6, -4);
-                ctx.lineTo(8, 0);
+                ctx.moveTo(2, 6);
+                ctx.lineTo(0, 2);
+                ctx.lineTo(4, 5);
+                ctx.closePath();
                 ctx.fill();
                 ctx.beginPath();
-                ctx.moveTo(12, 0);
-                ctx.lineTo(14, -4);
-                ctx.lineTo(16, 0);
+                ctx.moveTo(8, 5);
+                ctx.lineTo(10, 1);
+                ctx.lineTo(12, 5);
+                ctx.closePath();
                 ctx.fill();
                 
-                // Inner ears
-                ctx.fillStyle = '#fbbf24';
+                // Inner ears (pink)
+                ctx.fillStyle = '#fda4af';
                 ctx.beginPath();
-                ctx.moveTo(5, 0);
-                ctx.lineTo(6, -2);
-                ctx.lineTo(7, 0);
+                ctx.moveTo(2, 5);
+                ctx.lineTo(1, 3);
+                ctx.lineTo(3, 5);
+                ctx.closePath();
                 ctx.fill();
                 ctx.beginPath();
-                ctx.moveTo(13, 0);
-                ctx.lineTo(14, -2);
-                ctx.lineTo(15, 0);
+                ctx.moveTo(9, 5);
+                ctx.lineTo(10, 2);
+                ctx.lineTo(11, 5);
+                ctx.closePath();
                 ctx.fill();
                 
                 // Face stripes
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(1, 7, 1, 3);
+                ctx.fillRect(5, 6, 1, 2);
+                ctx.fillRect(9, 7, 1, 3);
+                
+                // Eyes (yellow with black pupil)
+                ctx.fillStyle = '#fef08a';
+                ctx.fillRect(2, 8, 3, 2);
+                ctx.fillRect(6, 8, 3, 2);
                 ctx.fillStyle = '#000000';
-                ctx.fillRect(5, 2, 1, 3);
-                ctx.fillRect(14, 2, 1, 3);
+                ctx.fillRect(3, 8, 1, 2);
+                ctx.fillRect(7, 8, 1, 2);
                 
-                // Eyes
-                ctx.fillStyle = this.isChasing ? '#ef4444' : '#000000';
-                ctx.fillRect(7, 3, 2, 2);
-                ctx.fillRect(11, 3, 2, 2);
+                // Nose (pink)
+                ctx.fillStyle = '#f472b6';
+                ctx.fillRect(4, 11, 2, 2);
                 
-                // Nose
-                ctx.fillStyle = '#000000';
-                ctx.beginPath();
-                ctx.arc(10, 7, 1.5, 0, Math.PI * 2);
-                ctx.fill();
+                // Mouth
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(4, 13, 1, 1);
+                ctx.fillRect(5, 13, 1, 1);
                 
-                // Legs
-                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b';
-                ctx.fillRect(3, 16, 3, 4);
-                ctx.fillRect(14, 16, 3, 4);
+                // Front legs
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(5, 18, 3, 4);
+                ctx.fillRect(11, 18, 3, 4);
+                
+                // Back legs
+                ctx.fillRect(18, 18, 3, 4);
+                ctx.fillRect(22, 18, 3, 4);
+                
+                // Paws (lighter)
+                ctx.fillStyle = '#fcd34d';
+                ctx.fillRect(5, 20, 3, 2);
+                ctx.fillRect(11, 20, 3, 2);
+                ctx.fillRect(18, 20, 3, 2);
+                ctx.fillRect(22, 20, 3, 2);
                 
                 // Tail
-                ctx.strokeStyle = this.isChasing ? '#dc2626' : '#f59e0b';
-                ctx.lineWidth = 2;
+                ctx.fillStyle = '#f59e0b';
                 ctx.beginPath();
-                ctx.moveTo(18, 10);
-                ctx.quadraticCurveTo(24, 6, 22, 2);
-                ctx.stroke();
+                ctx.moveTo(24, 10);
+                ctx.quadraticCurveTo(30, 8, 32, 4);
+                ctx.quadraticCurveTo(34, 0, 30, 2);
+                ctx.quadraticCurveTo(28, 6, 24, 12);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Tail stripes
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(26, 6, 2, 2);
+                ctx.fillRect(29, 3, 2, 2);
 
                 // Agro Indicator Bubble (!)
                 if (this.isChasing) {
                     ctx.fillStyle = '#ef4444';
-                    ctx.font = 'bold 12px sans-serif';
-                    ctx.fillText('!', this.width / 2 - 2, -8);
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.fillText('!', 5, -2);
                 }
 
                 ctx.restore();
