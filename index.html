@@ -701,16 +701,16 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.width = 20;
-                this.height = 18;
+                this.width = 24;
+                this.height = 20;
                 this.vx = 0;
                 this.vy = 0;
-                this.speed = 0.9; // Kecepatan dikurangi agar tidak terlalu cepat
-                this.jumpPower = -8.5;
+                this.speed = 1.2; // Macan lebih cepat
+                this.jumpPower = -9;
                 this.alive = true;
                 this.isGrounded = false;
                 this.isChasing = false;
-                this.detectionRadius = 220; // Distance to detect player
+                this.detectionRadius = 250; // Macan punya deteksi lebih jauh
             }
 
             update(player, platforms) {
@@ -809,26 +809,82 @@
                 ctx.save();
                 ctx.translate(this.x - cameraX, this.y);
 
-                // Mushroom Body
-                ctx.fillStyle = this.isChasing ? '#dc2626' : '#ea580c'; // Red head when agro
+                // Tiger Body
+                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b'; // Orange body, red when angry
+                ctx.fillRect(2, 6, 16, 10);
+                
+                // Tiger stripes
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(4, 6, 2, 10);
+                ctx.fillRect(9, 6, 2, 10);
+                ctx.fillRect(14, 6, 2, 10);
+                
+                // Tiger Head
+                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b';
                 ctx.beginPath();
-                ctx.arc(this.width / 2, 8, 10, Math.PI, 0, false);
+                ctx.arc(this.width / 2, 4, 7, 0, Math.PI * 2);
                 ctx.fill();
-
-                // Mushroom Stalk
-                ctx.fillStyle = '#ffe4e6';
-                ctx.fillRect(4, 8, 12, 10);
-
+                
+                // Ears
+                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b';
+                ctx.beginPath();
+                ctx.moveTo(4, 0);
+                ctx.lineTo(6, -4);
+                ctx.lineTo(8, 0);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(12, 0);
+                ctx.lineTo(14, -4);
+                ctx.lineTo(16, 0);
+                ctx.fill();
+                
+                // Inner ears
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                ctx.moveTo(5, 0);
+                ctx.lineTo(6, -2);
+                ctx.lineTo(7, 0);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(13, 0);
+                ctx.lineTo(14, -2);
+                ctx.lineTo(15, 0);
+                ctx.fill();
+                
+                // Face stripes
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(5, 2, 1, 3);
+                ctx.fillRect(14, 2, 1, 3);
+                
                 // Eyes
                 ctx.fillStyle = this.isChasing ? '#ef4444' : '#000000';
-                ctx.fillRect(6, 10, 2, 4);
-                ctx.fillRect(12, 10, 2, 4);
+                ctx.fillRect(7, 3, 2, 2);
+                ctx.fillRect(11, 3, 2, 2);
+                
+                // Nose
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(10, 7, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Legs
+                ctx.fillStyle = this.isChasing ? '#dc2626' : '#f59e0b';
+                ctx.fillRect(3, 16, 3, 4);
+                ctx.fillRect(14, 16, 3, 4);
+                
+                // Tail
+                ctx.strokeStyle = this.isChasing ? '#dc2626' : '#f59e0b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(18, 10);
+                ctx.quadraticCurveTo(24, 6, 22, 2);
+                ctx.stroke();
 
                 // Agro Indicator Bubble (!)
                 if (this.isChasing) {
                     ctx.fillStyle = '#ef4444';
                     ctx.font = 'bold 12px sans-serif';
-                    ctx.fillText('!', this.width / 2 - 2, -4);
+                    ctx.fillText('!', this.width / 2 - 2, -8);
                 }
 
                 ctx.restore();
